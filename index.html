@@ -1,0 +1,799 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Monopoly VR</title>
+
+    <script src="https://cdn.jsdelivr.net/npm/three@0.126.1/build/three.js"></script>
+    <script src="https://aframe.io/releases/1.1.0/aframe.min.js"></script>
+    <script src="https://cdn.rawgit.com/donmccurdy/aframe-physics-system/v4.0.1/dist/aframe-physics-system.min.js"></script>
+    <script src="https://cdn.rawgit.com/donmccurdy/aframe-extras/v6.1.1/dist/aframe-extras.min.js"></script>
+    <script src="https://unpkg.com/super-hands@2.0.2/dist/super-hands.min.js"></script>
+    <script src="https://unpkg.com/aframe-physics-extras@0.1.3/dist/aframe-physics-extras.min.js"></script>
+
+    <!-- http://127.0.0.1:5500/index.html -->
+    <script>
+        AFRAME.registerComponent('start-banner', {
+            render: () => `<a-entity>
+                <a-cylinder radius="0.1" height="2" color="red" position="-1 1 0"></a-cylinder>
+                <a-cylinder radius="0.1" height="2" color="red" position="1 1 0"></a-cylinder>
+                <a-box width="2.5" height="1.5" depth="0.1" position="0 1.5 -0.15">
+                    <a-box width="1.5" height="0.3" depth="0.1" position="0 0 -0.05" color="red">
+                        <a-cone radius-bottom="0.4" radius-top="0" height="0.5" position="-0.75 0 0" rotation="0 0 90" color="red"></a-cone>
+                    </a-box>
+                </a-box>
+            </a-entity>`,
+
+            init() {
+                this.el.innerHTML = this.render();
+            }
+        });
+
+        AFRAME.registerComponent('start-case', {
+            init() {
+                let i = 0;
+                this.el.addEventListener('collide', e => {
+                    const on_start_case_config = {
+                        e,
+                        el: this.el,
+                        first_time: false
+                    };
+                    if (i > 0 && !document.querySelector('#player-pass-on-start-case')) {
+                        const alert_recompence = document.createElement('a-entity');
+                        alert_recompence.setAttribute('id', 'player-pass-on-start-case');
+                        alert_recompence.setAttribute('position', '27.5 1.5 27.5');
+                        alert_recompence.setAttribute('animation', 'property: position; from: 27.5 1.5 27.5; to: 27.5 1 27.5; loop: true; dir: alternate');
+
+                        const dollar_model = document.createElement('a-obj-model');
+                        dollar_model.setAttribute('src', '#dollar-obj');
+                        dollar_model.setAttribute('mlt', '');
+                        dollar_model.setAttribute('position', '0 2 0');
+                        dollar_model.setAttribute('scale', '0.2 0.2 0.2');
+                        dollar_model.setAttribute('color', 'green');
+                        dollar_model.setAttribute('animation', 'property: rotation; from: 0 0 0; to: 0 360 0; loop: true; dur: 3000; easing: linear');
+
+                        alert_recompence.appendChild(dollar_model);
+
+                        const price = document.createElement('a-image');
+                        price.setAttribute('src', '#M200');
+                        price.setAttribute('position', '0 1 0');
+                        price.setAttribute('rotation', '0 180 0');
+                        price.setAttribute('width', '2');
+
+                        alert_recompence.appendChild(price);
+
+                        document.querySelector('a-scene').appendChild(alert_recompence);
+
+                        const timeout = setTimeout(() => {
+                            alert_recompence.remove();
+                            clearTimeout(timeout);
+                        }, 5000);
+                    } else {
+                        on_start_case_config.first_time = true;
+                    }
+                    i++;
+
+                    document.querySelector('#rig').emit('on-start-case', on_start_case_config)
+                });
+            }
+        });
+
+        AFRAME.registerComponent('prison-case', {
+            init() {
+                this.el.addEventListener('collide', e => {
+                    if (localStorage.getItem('go-to-prison')) {
+                        console.log('prison pendant x tours', e);
+                        localStorage.removeItem('go-to-prison');
+
+                        document.querySelector('#rig').emit('in-prison', {
+                            type: 'sejour',
+                            nb_tours: 2,
+                            e,
+                            el: this.el
+                        })
+                    } else {
+                        console.log('visite en prison', e);
+
+                        document.querySelector('#rig').emit('in-prison', {
+                            type: 'visite',
+                            e,
+                            el: this.el
+                        })
+                    }
+                });
+            }
+        });
+
+        AFRAME.registerComponent('free-park-case', {
+            init() {
+                this.el.addEventListener('collide', e => {
+                    console.log('Parc Gratuit', e);
+                    
+                    document.querySelector('#rig').emit('on-free-parc-case', {
+                        type: 'visite',
+                        e,
+                        el: this.el
+                    })
+                });
+            }
+        });
+
+        AFRAME.registerComponent('go-to-the-prison-case', {
+            init() {
+                this.el.addEventListener('collide', e => {
+                    console.log('Aller en prison', e);
+                    localStorage.setItem('go-to-prison', 'true');
+                    document.querySelector('#rig').emit('on-go-to-prison-case', {
+                        e,
+                        el: this.el
+                    })
+
+                    const box_teleport = document.createElement('a-box');
+                    box_teleport.setAttribute('width', '5');
+                    box_teleport.setAttribute('height', '2');
+                    box_teleport.setAttribute('depth', '0.1');
+                    box_teleport.setAttribute('position', '0 0 -0.5');
+
+                    box_teleport.setAttribute('color', 'black');
+                    box_teleport.setAttribute('opacity', '0');
+                    box_teleport.setAttribute('animation__fadein', 'property: opacity; from: 0; to: 1; dur: 1000; easing: linear');
+
+                    box_teleport.addEventListener('animationcomplete', e => {
+                        if (e.detail.name === 'animation__fadein') {
+                            document.querySelector('#rig').setAttribute('position', '-27.5 0 27.5');
+                            document.querySelector('#rig').setAttribute('rotation', '0 180 0');
+                            
+                            box_teleport.removeAttribute('animation__fadein');
+                            box_teleport.setAttribute('animation__fadeout', 'property: opacity; from: 1; to: 0; dur: 1000; easing: linear');
+                        } else box_teleport.remove();
+                    })
+
+                    document.querySelector('#camera').appendChild(box_teleport);
+                });
+            }
+        })
+
+        AFRAME.registerComponent('inter-case', {
+            schema: {
+                is_chance: {
+                    type: 'boolean',
+                    default: false
+                },
+                is_community: {
+                    type: 'boolean',
+                    default: false
+                },
+                is_train_station: {
+                    type: 'boolean',
+                    default: false
+                },
+                is_taxe: {
+                    type: 'boolean',
+                    default: false
+                },
+                taxe_type: {
+                    type: 'string',
+                    default: ''
+                },
+                train_station_name: {
+                    type: 'string',
+                    default: ''
+                },
+                address: {
+                    type: 'string',
+                    default: ''
+                },
+                price: {
+                    type: 'number',
+                    default: 0
+                }
+            },
+
+            init() {
+                this.el.addEventListener('collide', e => {
+                    document.querySelector('#rig').emit('on-inter-case', {
+                        e,
+                        el: this.el,
+                        data: this.data
+                    })
+                })
+
+            }
+        })
+
+        AFRAME.registerComponent('dice', {
+            schema: {
+                id: {
+                    type: 'number',
+                    default: 0
+                }
+            },
+
+            init() {
+                this.el.setAttribute('detect-movements', '');
+                this.el.setAttribute('detect-face-to-top', '');
+
+                this.el.addEventListener('break', () => {
+                    //console.log('id: ', this.el.getAttribute('dice').id);
+                    //console.log('cassé !!');
+                    this.el.parentElement.emit('break')
+                });
+                this.el.addEventListener('result', e => {
+                    //console.log('id: ', this.data.id);
+                    //console.log('to top: ', e.detail.result, ', to bottom: ', e.detail.number);
+                    
+                    this.el.parentElement.emit('result', {
+                        result: e.detail.result
+                    })
+                })
+            }
+        })
+
+        AFRAME.registerComponent('dices', {
+            init() {
+                const nb_dices = 2;
+
+                let dices_cmp = 0;
+                let breaks_cmp = 0;
+
+                let total_results_cmp = 0;
+
+                let final_result = 0;
+
+                this.el.addEventListener('break', () => {
+                    //console.log('id: ', this.el.getAttribute('dice').id);
+                    
+                    breaks_cmp++;
+                    total_results_cmp++;
+                    if (total_results_cmp === nb_dices - 1) {
+                        console.error(`${breaks_cmp} dé${breaks_cmp > 1 ? 's' : ''} cassé${breaks_cmp > 1 ? 's' : ''} !! résultat non valide !! REJOUER !!`);
+                    }
+                });
+                this.el.addEventListener('result', e => {
+                    //console.log('id: ', this.data.id);
+                    //console.log('to top: ', e.detail.result, ', to bottom: ', e.detail.number);
+
+                    total_results_cmp++;
+                    if (dices_cmp <= nb_dices - 1) {
+                        dices_cmp++;
+                        final_result += e.detail.result;
+                    } else {
+                        console.log('résultat final :', final_result);
+                        document.querySelector('#rig').emit('move-player', {
+                            cases: final_result
+                        })
+                    }
+                })
+            }
+        })
+
+        AFRAME.registerComponent('dice-face', {
+            schema: {
+                result: {
+                    type: 'number'
+                },
+                number: {
+                    type: 'number'
+                }
+            },
+            
+            init() {
+                this.el.addEventListener('collide', e => {
+                    this.el.parentElement.emit('result', { 
+                        result: this.data.result, 
+                        number: this.data.number 
+                    });
+                })
+            }
+        })
+    
+        AFRAME.registerComponent('detect-movements', {
+            clear(number) {
+                return Math.round(number);
+            },
+
+            init() {
+                this.position_initialized = false;
+                this.prev_position = {
+                    x: this.clear(this.el.getAttribute('position').x),
+                    y: this.clear(this.el.getAttribute('position').y),
+                    z: this.clear(this.el.getAttribute('position').z)
+                };
+                this.prev_rotation = {
+                    x: this.clear(this.el.getAttribute('rotation').x),
+                    y: this.clear(this.el.getAttribute('rotation').y),
+                    z: this.clear(this.el.getAttribute('rotation').z)
+                };
+            },
+
+            tick(time, timeDelta) {
+                if (!this.position_initialized) {
+                    this.el.emit('position_initialized', {
+                        position: this.prev_position,
+                        rotation: this.prev_rotation
+                    }, false);
+                    this.position_initialized = true;
+                } else {
+                    const position = {
+                        x: this.clear(this.el.getAttribute('position').x),
+                        y: this.clear(this.el.getAttribute('position').y),
+                        z: this.clear(this.el.getAttribute('position').z)
+                    };
+                    const rotation = {
+                        x: this.clear(this.el.getAttribute('rotation').x),
+                        y: this.clear(this.el.getAttribute('rotation').y),
+                        z: this.clear(this.el.getAttribute('rotation').z)
+                    };
+
+                    if (position.x !== this.prev_position.x || position.y !== this.prev_position.y || position.z !== this.prev_position.z) {
+                        this.prev_position = position;
+                        this.el.emit('position_changed', { position });
+                    }
+
+                    if (rotation.x !== this.prev_rotation.x || rotation.y !== this.prev_rotation.y || rotation.z !== this.prev_rotation.z) {
+                        this.prev_rotation = rotation;
+                        this.el.emit('rotation_changed', { rotation });
+                    }
+                }
+            }
+        });
+
+        AFRAME.registerComponent('detect-face-to-top', {
+            init() {
+                const get_element_from_number = number => Array.from(this.el.querySelectorAll('[dice-face]')).reduce((r, c) => {
+                    if (c.getAttribute('dice-face').result === number) r = c;
+                    return r;
+                }, null);
+                
+                const get_element_from_rotation = rotation => {
+                    const IS_1 = Math.abs(rotation.x) === 0 && Math.abs(rotation.z) === -180;
+                    const IS_2 = Math.abs(rotation.x) === 0 && Math.abs(rotation.z) === 90;
+                    const IS_3 = rotation.x === -90;
+                    const IS_4 = rotation.z === -90;
+                    const IS_5 = rotation.x === 90 && rotation.z === 0;
+                    const IS_6 = rotation.x === 0 && rotation.z === -90;
+
+                    let num = 0;
+                    if (IS_1) num = 1;
+                    else if (IS_2) num = 2;
+                    else if (IS_3) num = 3;
+                    else if (IS_4) num = 4;
+                    else if (IS_5) num = 5;
+                    else if (IS_6) num = 6;
+
+                    return get_element_from_number(num);
+                };
+
+                let timeout = 0;
+
+                this.el.addEventListener('rotation_changed', e => {
+                    if (timeout) clearInterval(timeout);
+
+                    timeout = setTimeout(() => {
+                        //console.log(e.detail.rotation);
+                        const el = get_element_from_rotation(e.detail.rotation);
+                        if (el) {
+                            //console.log(el);
+                            el.dispatchEvent(new CustomEvent('collide'))
+                        } else {
+                            this.el.dispatchEvent(new CustomEvent('break'));
+                        }
+                        clearInterval(timeout);
+                    }, 1000);
+                });
+            }
+        });
+    
+        AFRAME.registerComponent('player-move', {
+            init() {
+                const extremity_cases_size = {
+                    width: 10,
+                    height: 10
+                };
+                const inter_cases_size = {
+                    width: 5,
+                    height: 10
+                };
+
+                const on_start_case_handler = e => {
+                    console.log('player is on start case');
+
+                    if (!e.detail.first_time) {
+                        document.querySelector('#rig').setAttribute('rotation', {
+                            x: document.querySelector('#rig').getAttribute('rotation').x,
+                            y: document.querySelector('#rig').getAttribute('rotation').y + 90,
+                            z: document.querySelector('#rig').getAttribute('rotation').z
+                        });
+                    }
+
+                    this.el.removeEventListener('on-start-case', on_start_case_handler);
+                };
+
+                const in_prison_handler = e => {
+                    switch (e.detail.type) {
+                        case 'visite':
+                            console.log('player visit prison');
+                            break;
+                        case 'sejour':
+                            console.log(`player go to prison on ${e.detail.nb_tours} tour${e.detail.nb_tours > 1 ? 's' : ''}`);
+                            break;
+                    }
+
+                    document.querySelector('#rig').setAttribute('animation__rotation', {
+                        property: 'rotation',
+                        to: `${document.querySelector('#rig').getAttribute('rotation').x} ${document.querySelector('#rig').getAttribute('rotation').y - 90} ${document.querySelector('#rig').getAttribute('rotation').z}`,
+                        dur: 1000,
+                        easing: 'linear'
+                    });
+
+                    const animationcomplete_handler = e => {
+                        document.querySelector('#rig').removeAttribute('animation__rotation');
+                        document.querySelector('#rig').removeEventListener('animationcomplete__rotation', animationcomplete_handler)
+                    };
+
+                    document.querySelector('#rig').addEventListener('animationcomplete__rotation', animationcomplete_handler)
+
+                    /*document.querySelector('#rig').setAttribute('rotation', {
+                        x: document.querySelector('#rig').getAttribute('rotation').x,
+                        y: document.querySelector('#rig').getAttribute('rotation').y - 90,
+                        z: document.querySelector('#rig').getAttribute('rotation').z
+                    });*/
+
+                    this.el.removeEventListener('in-prison', in_prison_handler);
+                };
+
+                const in_free_park_handler = e => {
+                    console.log('player is on free park');
+
+                    document.querySelector('#rig').setAttribute('rotation', {
+                        x: document.querySelector('#rig').getAttribute('rotation').x,
+                        y: document.querySelector('#rig').getAttribute('rotation').y + 90,
+                        z: document.querySelector('#rig').getAttribute('rotation').z
+                    });
+
+                    this.el.removeEventListener('on-free-park-case', in_free_park_handler);
+                };
+
+                const animationcomplete_handler = () => {
+                    this.el.removeAttribute('animation__move-player');
+                    this.el.removeEventListener('animationcomplete__move-player', animationcomplete_handler)
+                };
+
+                const on_stop_on_inter_case_handler = e => {
+                    const { is_chance, is_community, is_train_station, is_taxe, taxe_type, train_station_name, address, price } = e.detail.detail.data;
+                
+                    if (is_chance) {
+                        console.log('Chance Card');
+                    } else if (is_community) {
+                        console.log('Community Card');
+                    } else if (is_train_station) {
+                        console.log(`Train station: ${train_station_name} => M${price}`);
+                    } else if (is_taxe) {
+                        console.log(`Taxe: ${taxe_type} => M${price}`);
+                    } else {
+                        console.log(`Address: ${address} => M${price}`)
+                    }
+                };
+
+                let inter_case_handle_timeout = null;
+                this.el.addEventListener('on-inter-case', e => {
+                    if (inter_case_handle_timeout) clearTimeout(inter_case_handle_timeout);
+
+                    this.el.addEventListener('on-start-case', () => {})
+                    this.el.addEventListener('in-prison', () => {})
+                    this.el.addEventListener('on-start-case', () => {})
+
+                    inter_case_handle_timeout = setTimeout(() => {
+                        this.el.emit('on-stop-on-inter-case', e);
+                        clearTimeout(inter_case_handle_timeout);
+                    }, 800);
+                });
+
+                this.el.addEventListener('on-start-case', on_start_case_handler);
+                this.el.addEventListener('in-prison', in_prison_handler);
+                this.el.addEventListener('on-free-park-case', in_free_park_handler);
+
+                this.el.addEventListener('on-stop-on-inter-case', on_stop_on_inter_case_handler);
+
+                this.el.addEventListener('animationcomplete__move-player', animationcomplete_handler);
+
+                this.el.addEventListener('move-player', e => {
+                    this.data.cases = e.detail.cases;
+                    
+                    this.el.setAttribute('animation__move-player', {
+                        property: 'position',
+                        to: `${this.el.getAttribute('position').x - (((this.data.cases + 1) * inter_cases_size.width) + (inter_cases_size.width / 2))} ${this.el.getAttribute('position').y} ${this.el.getAttribute('position').z}`,
+                        easing: 'linear',
+                        dur: this.data.cases * 1000
+                    });
+                })
+            }
+        });
+
+        AFRAME.registerComponent('piece', {
+            schema: {
+                color: {
+                    type: 'color',
+                    default: 'gray'
+                }
+            },
+
+            init() {
+                this.el.innerHTML = `
+                    <a-sphere radius="0.2" color="${this.data.color}" position="0 1.5 0"></a-sphere>
+                    <a-cone radius-top="0" radius-bottom="0.3" height="1.6" color="${this.data.color}" position="0 0.8 0"></a-cone>
+                `;
+            }
+        })
+    </script>
+</head>
+<body>
+    <a-scene physics="debug: false" cursor="rayOrigin: mouse">
+        <a-assets>
+            <a-asset-item id="dollar-obj" src="3d-models/Cash_Symbol.obj"></a-asset-item>
+            <img id="M200" src="images/M200.png" >
+
+            <!-- IMAGES DU DE A JOUER -->
+            <img id="de-face-1" src="images/de-face-1.PNG" >
+            <img id="de-face-2" src="images/de-face-2.PNG" >
+            <img id="de-face-3" src="images/de-face-3.PNG" >
+            <img id="de-face-4" src="images/de-face-4.PNG" >
+            <img id="de-face-5" src="images/de-face-5.PNG" >
+            <img id="de-face-6" src="images/de-face-6.PNG" >
+        </a-assets>
+
+        <a-sky color="skyblue"></a-sky>
+
+        <!-- 27.5 0 25 -->
+        <!-- keyboard-controls movement-controls  -->
+        <a-entity id="rig" position="32 0 26.5" rotation="0 90 0"
+                  kinematic-body="radius: 0.4" player-move>
+            <a-entity id="camera" camera="userHeight: 1.6"
+                      look-controls="pointerLockEnabled: false"
+                      position="0 1.6 0"></a-entity>
+
+            <!--<a-entity id="left-hand"
+                      position="-0.25 0.6 0"
+                      hand-controls="hand: left; handModelStyle: lowPoly; color: #ffcccc"
+                      sphere-collider="objects: .ground, .celling" super-hands
+                      cursor raycaster="far: 2; objects: "
+                      teleport-controls="cameraRig: #rig; teleportOrigin: #camera; button: grip; type: parabolic;"></a-entity>
+
+            <a-entity id="right-hand"
+                      position="0.25 0.6 0"
+                      hand-controls="hand: right; handModelStyle: lowPoly; color: #ffcccc"
+                      sphere-collider="objects: a-door, a-box" super-hands
+                      cursor raycaster="far: 2; objects: "></a-entity>-->
+        </a-entity>
+
+        <a-entity dices>
+            <!-- DICE 1 -->
+            <a-entity dynamic-body="shape: box: mass: 200" velocity="-3 -5 -5"
+                    position="20 2 20" rotation="45 0 0" 
+                    dice="id: 1" 
+                    geometry="primitive: box; width: 1; height: 1; depth: 1">
+                <a-plane width="1" height="1" 
+                        position="0 -0.52 0" rotation="90 90 0" 
+                        material="src: #de-face-1" 
+                        dice-face="number: 1; result: 6"></a-plane>
+
+                <a-plane width="1" height="1" 
+                        position="0 0 0.52" rotation="0 0 -90" 
+                        material="src: #de-face-3"
+                        dice-face="number: 3; result: 5"></a-plane>
+
+                <a-plane width="1" height="1" 
+                        position="0.51 0 0" rotation="0 90 0" 
+                        material="src: #de-face-2"
+                        dice-face="number: 2; result: 4"></a-plane>
+
+                <a-plane width="1" height="1" 
+                        position="-0.51 0 0" rotation="0 -90 0" 
+                        material="src: #de-face-4"
+                        dice-face="number: 4; result: 2"></a-plane>
+
+                <a-plane width="1" height="1" 
+                        position="0 0.52 0" rotation="-90 0 0" 
+                        material="src: #de-face-6"
+                        dice-face="number: 6; result: 1"></a-plane>
+
+                <a-plane width="1" height="1" 
+                        position="0 0 -0.51" rotation="0 180 0" 
+                        material="src: #de-face-5"
+                        dice-face="number: 5; result: 3"></a-plane>
+            </a-entity>
+
+            <!-- DICE 2 -->
+            <a-entity dynamic-body="shape: box: mass: 200" velocity="-3 -5 -5" 
+                    position="20 2 20" rotation="45 0 0"
+                    dice="id: 2"
+                    geometry="primitive: box; width: 1; height: 1; depth: 1">
+                <a-plane width="1" height="1" 
+                        position="0 -0.52 0" rotation="90 90 0" 
+                        material="src: #de-face-1" 
+                        dice-face="number: 1; result: 6"></a-plane>
+
+                <a-plane width="1" height="1" 
+                        position="0 0 0.52" rotation="0 0 -90" 
+                        material="src: #de-face-3"
+                        dice-face="number: 3; result: 5"></a-plane>
+
+                <a-plane width="1" height="1" 
+                        position="0.51 0 0" rotation="0 90 0" 
+                        material="src: #de-face-2"
+                        dice-face="number: 2; result: 4"></a-plane>
+
+                <a-plane width="1" height="1" 
+                        position="-0.51 0 0" rotation="0 -90 0" 
+                        material="src: #de-face-4"
+                        dice-face="number: 4; result: 2"></a-plane>
+
+                <a-plane width="1" height="1" 
+                        position="0 0.52 0" rotation="-90 0 0" 
+                        material="src: #de-face-6"
+                        dice-face="number: 6; result: 1"></a-plane>
+
+                <a-plane width="1" height="1" 
+                        position="0 0 -0.51" rotation="0 180 0" 
+                        material="src: #de-face-5"
+                        dice-face="number: 5; result: 3"></a-plane>
+            </a-entity>
+        </a-entity>
+
+        <a-entity piece="color: purple" position="32 0 26.5"></a-entity>
+
+
+        <!-- PLATEAU -->
+        <a-box width="65" height="0.01" depth="65" 
+               color="green" 
+               class="plateau" 
+               static-body>
+            <a-box width="45" height="0.01" depth="45" 
+                   color="white" 
+                   position="0 0.02 0" 
+                   static-body></a-box>
+        </a-box>
+
+        <!-- REBORD EXTERNES DU PLATEAU -->
+        <a-box width="65" height="1" depth="0.1" static-body position="0 0.5 32.5"></a-box>
+        <a-box width="65" height="1" depth="0.1" static-body position="0 0.5 -32.5"></a-box>
+
+        <a-box width="0.1" height="1" depth="65" static-body position="32.5 0.5 0"></a-box>
+        <a-box width="0.1" height="1" depth="65" static-body position="-32.5 0.5 0"></a-box>
+        
+        <!-- REBORD INTERNES DU PLATEAU -->
+        <a-box width="45" height="1" depth="0.1" static-body position="0 0.5 22.5"></a-box>
+        <a-box width="45" height="1" depth="0.1" static-body position="0 0.5 -22.5"></a-box>
+
+        <a-box width="0.1" height="1" depth="45" static-body position="22.5 0.5 0"></a-box>
+        <a-box width="0.1" height="1" depth="45" static-body position="-22.5 0.5 0"></a-box>
+
+        <!-- COINS DU PLATEAUX -->
+        <a-box width="10" height="0.01" depth="10" position="27.5 0.02 27.5" class="start" color="red" static-body start-case></a-box>
+        
+        <a-box width="10" height="0.01" depth="10" position="-27.5 0.02 27.5" class="prison" color="orange" static-body prison-case></a-box>
+        
+        <a-box width="10" height="0.01" depth="10" position="-27.5 0.02 -27.5" class="parc-gratuit" color="pink" static-body free-park-case></a-box>
+        
+        <a-box width="10" height="0.01" depth="10" position="27.5 0.02 -27.5" class="aller-en-prison" color="blue" static-body go-to-the-prison-case></a-box>
+
+        <!-- BANNER -->
+        <a-entity start-banner position="27.5 0 32"></a-entity>
+
+        <!-- CASES INTERMEDIERES -->
+        <!-- left -->
+        <a-box width="5" height="0.01" depth="10" position="20 0.02 27.5" color="#944828" data-price="M60" class="boulevard-de-belleville" 
+               static-body inter-case="address: Boulevard de Belleville; price: 60"></a-box>
+
+        <a-box width="5" height="0.01" depth="10" position="15 0.02 27.5" color="white" class="caisse-de-communaute"
+               static-body inter-case="is_community: true"></a-box>
+        
+        <a-box width="5" height="0.01" depth="10" position="10 0.02 27.5" color="#944828" data-price="M60" class="rue-lecourbe"
+               static-body inter-case="address: Rue Lecourbe; price: 60"></a-box>
+        
+        <a-box width="5" height="0.01" depth="10" position="5 0.02 27.5" color="white" data-price="M200" class="impots-sur-revenu"
+               static-body inter-case="is_taxe: true; taxe_type: Impots sur le revenu; price: 200"></a-box>
+        
+        <a-box width="5" height="0.01" depth="10" position="0 0.02 27.5" color="white" data-price="M200" class="garre-montparnasse" 
+               static-body inter-case="is_train_station: true; train_station_name: Montparnasse; price: 200"></a-box>
+        
+        <a-box width="5" height="0.01" depth="10" position="-5 0.02 27.5" color="#BAE4FA" data-price="M100" class="rue-de-vaugirard" 
+               static-body inter-case="address: Rue de Vaugirard; price: 100"></a-box>
+        
+        <a-box width="5" height="0.01" depth="10" position="-10 0.02 27.5" color="white" class="chance" 
+               static-body inter-case="is_chance: true"></a-box>
+        
+        <a-box width="5" height="0.01" depth="10" position="-15 0.02 27.5" color="#BAE4FA" data-price="M100" class="rue-de-courcelle" 
+               static-body inter-case="address: Rue de Courcelle; price: 100"></a-box>
+        
+        <a-box width="5" height="0.01" depth="10" position="-20 0.02 27.5" color="#BAE4FA" data-price="M120" class="avenue-de-la-republique"  
+               static-body inter-case="address: Avenue de la République; price: 120"></a-box>
+
+        <!-- front -->
+        <a-box width="10" height="0.01" depth="5" position="-27.5 0.02 20" color="#D72F87" data-price="M140" class="boulevard-de-la-villette" 
+               static-body inter-case="address: Boulevard de la Villette; price: 140"></a-box>
+        
+        <a-box width="10" height="0.01" depth="5" position="-27.5 0.02 15" color="white" data-price="M150" class="compagnie-de-distribution-d-electricite" 
+               static-body inter-case="address: Compagnie de distribution d'éléctricité; price: 150"></a-box>
+        
+        <a-box width="10" height="0.01" depth="5" position="-27.5 0.02 10" color="#D72F87" data-price="M140" class="avenue-de-neuilly" 
+               static-body inter-case="address: Avenue de Neuilly; price: 140"></a-box>
+        
+        <a-box width="10" height="0.01" depth="5" position="-27.5 0.02 5" color="#D72F87" data-price="M160" class="rue-de-paradis" 
+               static-body inter-case="address: Rue du paradis; price: 160"></a-box>
+        
+        <a-box width="10" height="0.01" depth="5" position="-27.5 0.02 0" color="white" data-price="M200" class="garre-de-lyon" 
+               static-body inter-case="is_train_station: true, train_station_name: de Lyon; price: 200"></a-box>
+        
+        <a-box width="10" height="0.01" depth="5" position="-27.5 0.02 -5" color="#F88F02" data-price="M180" class="avenue-mozart" 
+               static-body inter-case="address: Avenue Mozart; price: 180"></a-box>
+        
+        <a-box width="10" height="0.01" depth="5" position="-27.5 0.02 -10" color="white" class="caisse-de-communaute" 
+               static-body inter-case="is_community: true"></a-box>
+        
+        <a-box width="10" height="0.01" depth="5" position="-27.5 0.02 -15" color="#F88F02" data-price="M180" class="boulevard-saint-michel"  
+               static-body inter-case="address: Boulevard Sait-Michel; price: 180"></a-box>
+        
+        <a-box width="10" height="0.01" depth="5" position="-27.5 0.02 -20" color="#F88F02" data-price="M200" class="place-pigalle" 
+               static-body inter-case="address: Place Pigalle; price: 200"></a-box>
+
+        <!-- right -->
+        <a-box width="5" height="0.01" depth="10" position="20 0.02 -27.5" color="#FFEC00" data-price="M280" class="rue-la-fayette" 
+               static-body inter-case="address: Rue la fayette; price: 280"></a-box>
+
+        <a-box width="5" height="0.01" depth="10" position="15 0.02 -27.5" color="white" data-price="M150" class="compagnie-de-distribution-des-eaux" 
+               static-body inter-case="address: Compagnie de distribution des eaux; price: 150"></a-box>
+        
+        <a-box width="5" height="0.01" depth="10" position="10 0.02 -27.5" color="#FFEC00" data-price="M260" class="place-de-la-bourse" 
+               static-body inter-case="address: Place de la bourse; price: 260"></a-box>
+        
+        <a-box width="5" height="0.01" depth="10" position="5 0.02 -27.5" color="#FFEC00" data-price="M260" class="faubourg-saint-honoré" 
+               static-body inter-case="address: Faybourg Saint-Honoré; price: 260"></a-box>
+        
+        <a-box width="5" height="0.01" depth="10" position="0 0.02 -27.5" color="white" data-price="M200" class="garre-du-nord" 
+               static-body inter-case="is_train_station: true, train_station_name: du Nord; price: 200"></a-box>
+        
+        <a-box width="5" height="0.01" depth="10" position="-5 0.02 -27.5" color="#E4000F" data-price="M240" class="avenue-henri-martin" 
+               static-body inter-case="address: Avenue Henri Martin; price: 240"></a-box>
+        
+        <a-box width="5" height="0.01" depth="10" position="-10 0.02 -27.5" color="#E4000F" data-price="M220" class="boulevard-malesherbes" 
+               static-body inter-case="address: Boulevard Malesherbes; price: 220"></a-box>
+        
+        <a-box width="5" height="0.01" depth="10" position="-15 0.02 -27.5" color="white" class="chance" 
+               static-body inter-case="is_chance: true"></a-box>
+        
+        <a-box width="5" height="0.01" depth="10" position="-20 0.02 -27.5" color="#E4000F" data-price="M220" class="avenue-matignon" 
+               static-body inter-case="address: Avenue Matignon; price: 220"></a-box>
+
+        <!-- back -->
+        <a-box width="10" height="0.01" depth="5" position="27.5 0.02 20" color="#0168B3" data-price="M140" class="rue-de-la-paix" 
+               static-body inter-case="address: Rue de la paix; price: 140"></a-box>
+        
+        <a-box width="10" height="0.01" depth="5" position="27.5 0.02 15" color="white" data-price="M100" class="taxe-de-luxe" 
+               static-body inter-case="is_taxe: true; taxe_type: Taxe de Luxe; price: 100"></a-box>
+        
+        <a-box width="10" height="0.01" depth="5" position="27.5 0.02 10" color="#0168B3" data-price="M350" class="avenue-des-champs-elysees" 
+               static-body inter-case="address: Avenue des Champs-Elisées; price: 350"></a-box>
+        
+        <a-box width="10" height="0.01" depth="5" position="27.5 0.02 5" color="white" class="chance" 
+               static-body inter-case="is_chance: true"></a-box>
+        
+        <a-box width="10" height="0.01" depth="5" position="27.5 0.02 0" color="white" data-price="M200" class="garre-saint-lazare" 
+               static-body inter-case="is_train_station: true; train_station_name: Saint-lazare; price: 200"></a-box>
+        
+        <a-box width="10" height="0.01" depth="5" position="27.5 0.02 -5" color="#20A54D" data-price="M320" class="boulevard-des-capucines" 
+               static-body inter-case="address: Boulevard des Capucines; price: 320"></a-box>
+        
+        <a-box width="10" height="0.01" depth="5" position="27.5 0.02 -10" color="white" class="caisse-de-communaute" 
+               static-body inter-case="is_community: true"></a-box>
+        
+        <a-box width="10" height="0.01" depth="5" position="27.5 0.02 -15" color="#20A54D" data-price="M300" class="avenue-foch" 
+               static-body inter-case="address: Avenue Fosh; price: 300"></a-box>
+        
+        <a-box width="10" height="0.01" depth="5" position="27.5 0.02 -20" color="#20A54D" data-price="M300" class="avenue-de-breteuil" 
+               static-body inter-case="address: Avenue Dubreuil; price: 300"></a-box>
+    </a-scene>
+</body>
+</html>
