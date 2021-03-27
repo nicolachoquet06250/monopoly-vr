@@ -232,9 +232,52 @@
         })
 
         AFRAME.registerComponent('dices', {
-            init() {
-                const nb_dices = 2;
+            schema: {
+                nb_dices: {
+                    type: 'number',
+                    default: 1
+                }
+            },
 
+            template: position => `
+            <a-entity 
+                    position="${position.x} ${position.y} ${position.z}" rotation="47 0 0" 
+                    dice="id: 1" 
+                    data-position='${JSON.stringify(position)}'
+                    geometry="primitive: box; width: 1; height: 1; depth: 1">
+                <a-plane width="1" height="1" 
+                        position="0 -0.52 0" rotation="90 90 0" 
+                        material="src: #de-face-1" 
+                        dice-face="number: 1; result: 6"></a-plane>
+
+                <a-plane width="1" height="1" 
+                        position="0 0 0.52" rotation="0 0 -90" 
+                        material="src: #de-face-3"
+                        dice-face="number: 3; result: 5"></a-plane>
+
+                <a-plane width="1" height="1" 
+                        position="0.52 0 0" rotation="0 90 0" 
+                        material="src: #de-face-2"
+                        dice-face="number: 2; result: 4"></a-plane>
+
+                <a-plane width="1" height="1" 
+                        position="-0.52 0 0" rotation="0 -90 0" 
+                        material="src: #de-face-4"
+                        dice-face="number: 4; result: 2"></a-plane>
+
+                <a-plane width="1" height="1" 
+                        position="0 0.52 0" rotation="-90 0 0" 
+                        material="src: #de-face-6"
+                        dice-face="number: 6; result: 1"></a-plane>
+
+                <a-plane width="1" height="1" 
+                        position="0 0 -0.52" rotation="0 180 0" 
+                        material="src: #de-face-5"
+                        dice-face="number: 5; result: 3"></a-plane>
+            </a-entity>
+            `,
+
+            init() {
                 let dices_cmp = 0;
                 let breaks_cmp = 0;
 
@@ -243,20 +286,15 @@
                 let final_result = 0;
 
                 this.el.addEventListener('break', () => {
-                    //console.log('id: ', this.el.getAttribute('dice').id);
-                    
                     breaks_cmp++;
                     total_results_cmp++;
-                    if (total_results_cmp === nb_dices - 1) {
+                    if (total_results_cmp === this.data.nb_dices - 1) {
                         console.error(`${breaks_cmp} dé${breaks_cmp > 1 ? 's' : ''} cassé${breaks_cmp > 1 ? 's' : ''} !! résultat non valide !! REJOUER !!`);
                     }
                 });
                 this.el.addEventListener('result', e => {
-                    //console.log('id: ', this.data.id);
-                    //console.log('to top: ', e.detail.result, ', to bottom: ', e.detail.number);
-
                     total_results_cmp++;
-                    if (dices_cmp <= nb_dices - 1) {
+                    if (dices_cmp <= this.data.nb_dices - 1) {
                         dices_cmp++;
                         final_result += e.detail.result;
                     } else {
@@ -266,6 +304,16 @@
                         })
                     }
                 })
+
+                this.el.innerHTML = '';
+                for (let i = 0; i < this.data.nb_dices; i++) {
+                    this.el.innerHTML += this.template({
+                        x: -2 + (i + 1),
+                        y: 2,
+                        z: 0
+                    });
+                }
+                
             }
         })
 
@@ -381,13 +429,15 @@
                             this.el.dispatchEvent(new CustomEvent('break'));
                         }
                         clearInterval(timeout);
-                    }, 1000);
+                    }, 1500);
                 });
             }
         });
     
         AFRAME.registerComponent('player-move', {
             init() {
+                let is_in_coin_case = true;
+
                 const extremity_cases_size = {
                     width: 10,
                     height: 10
@@ -399,22 +449,40 @@
 
                 const on_start_case_handler = e => {
                     console.log('player is on start case');
+                    is_in_coin_case = true;
+
+                    localStorage.setItem('move-sens', 'x');
 
                     if (!e.detail.first_time) {
-                        document.querySelector('#rig').setAttribute('rotation', {
-                            x: document.querySelector('#rig').getAttribute('rotation').x,
-                            y: document.querySelector('#rig').getAttribute('rotation').y + 90,
-                            z: document.querySelector('#rig').getAttribute('rotation').z
+                        document.querySelector('#rig').setAttribute('animation__rotation', {
+                            property: 'rotation',
+                            to: `${document.querySelector('#rig').getAttribute('rotation').x} ${document.querySelector('#rig').getAttribute('rotation').y - 90} ${document.querySelector('#rig').getAttribute('rotation').z}`,
+                            dur: 1000,
+                            easing: 'linear'
                         });
+
+                        const animationcomplete_handler = e => {
+                            document.querySelector('#rig').removeAttribute('animation__rotation');
+                            document.querySelector('#rig').removeEventListener('animationcomplete__rotation', animationcomplete_handler)
+                        };
+
+                        document.querySelector('#rig').addEventListener('animationcomplete__rotation', animationcomplete_handler)
                     }
 
                     this.el.removeEventListener('on-start-case', on_start_case_handler);
                 };
 
                 const in_prison_handler = e => {
+                    is_in_coin_case = true;
                     switch (e.detail.type) {
                         case 'visite':
                             console.log('player visit prison');
+                            localStorage.setItem('move-sens', 'z');
+                            const remove_move_player_animation_timeout = setTimeout(() => {
+                                document.querySelector('#rig').removeAttribute('animation__move-player');
+                                clearTimeout(remove_move_player_animation_timeout);
+                            }, 800);
+                            
                             break;
                         case 'sejour':
                             console.log(`player go to prison on ${e.detail.nb_tours} tour${e.detail.nb_tours > 1 ? 's' : ''}`);
@@ -433,25 +501,34 @@
                         document.querySelector('#rig').removeEventListener('animationcomplete__rotation', animationcomplete_handler)
                     };
 
-                    document.querySelector('#rig').addEventListener('animationcomplete__rotation', animationcomplete_handler)
-
-                    /*document.querySelector('#rig').setAttribute('rotation', {
-                        x: document.querySelector('#rig').getAttribute('rotation').x,
-                        y: document.querySelector('#rig').getAttribute('rotation').y - 90,
-                        z: document.querySelector('#rig').getAttribute('rotation').z
-                    });*/
+                    document.querySelector('#rig').addEventListener('animationcomplete__rotation', animationcomplete_handler);
 
                     this.el.removeEventListener('in-prison', in_prison_handler);
                 };
 
                 const in_free_park_handler = e => {
+                    is_in_coin_case = true;
                     console.log('player is on free park');
+                    localStorage.setItem('move-sens', 'x');
+                    const remove_move_player_animation_timeout = setTimeout(() => {
+                        document.querySelector('#rig').removeAttribute('animation__move-player');
+                        clearTimeout(remove_move_player_animation_timeout);
+                    }, 800);
 
-                    document.querySelector('#rig').setAttribute('rotation', {
-                        x: document.querySelector('#rig').getAttribute('rotation').x,
-                        y: document.querySelector('#rig').getAttribute('rotation').y + 90,
-                        z: document.querySelector('#rig').getAttribute('rotation').z
+
+                    document.querySelector('#rig').setAttribute('animation__rotation', {
+                        property: 'rotation',
+                        to: `${document.querySelector('#rig').getAttribute('rotation').x} ${document.querySelector('#rig').getAttribute('rotation').y - 90} ${document.querySelector('#rig').getAttribute('rotation').z}`,
+                        dur: 1000,
+                        easing: 'linear'
                     });
+
+                    const animationcomplete_handler = e => {
+                        document.querySelector('#rig').removeAttribute('animation__rotation');
+                        document.querySelector('#rig').removeEventListener('animationcomplete__rotation', animationcomplete_handler)
+                    };
+
+                    document.querySelector('#rig').addEventListener('animationcomplete__rotation', animationcomplete_handler)
 
                     this.el.removeEventListener('on-free-park-case', in_free_park_handler);
                 };
@@ -479,6 +556,7 @@
 
                 let inter_case_handle_timeout = null;
                 this.el.addEventListener('on-inter-case', e => {
+                    is_in_coin_case = false;
                     if (inter_case_handle_timeout) clearTimeout(inter_case_handle_timeout);
 
                     this.el.addEventListener('on-start-case', () => {})
@@ -486,7 +564,9 @@
                     this.el.addEventListener('on-start-case', () => {})
 
                     inter_case_handle_timeout = setTimeout(() => {
-                        this.el.emit('on-stop-on-inter-case', e);
+                        if (!is_in_coin_case) {
+                            this.el.emit('on-stop-on-inter-case', e);
+                        }
                         clearTimeout(inter_case_handle_timeout);
                     }, 800);
                 });
@@ -501,10 +581,17 @@
 
                 this.el.addEventListener('move-player', e => {
                     this.data.cases = e.detail.cases;
-                    
+
+                    let to;
+                    if (localStorage.getItem('move-sens') && localStorage.getItem('move-sens') === 'x') {
+                        to = `${this.el.getAttribute('position').x - (((this.data.cases + 1) * inter_cases_size.width) + (inter_cases_size.width / 2))} ${this.el.getAttribute('position').y} ${this.el.getAttribute('position').z}`;
+                    } else {
+                        to = `${this.el.getAttribute('position').x} ${this.el.getAttribute('position').y} ${this.el.getAttribute('position').z - (((this.data.cases + 1) * inter_cases_size.width) + (inter_cases_size.width / 2))}`
+                    }
+
                     this.el.setAttribute('animation__move-player', {
                         property: 'position',
-                        to: `${this.el.getAttribute('position').x - (((this.data.cases + 1) * inter_cases_size.width) + (inter_cases_size.width / 2))} ${this.el.getAttribute('position').y} ${this.el.getAttribute('position').z}`,
+                        to,
                         easing: 'linear',
                         dur: this.data.cases * 1000
                     });
@@ -525,6 +612,38 @@
                     <a-sphere radius="0.2" color="${this.data.color}" position="0 1.5 0"></a-sphere>
                     <a-cone radius-top="0" radius-bottom="0.3" height="1.6" color="${this.data.color}" position="0 0.8 0"></a-cone>
                 `;
+            }
+        });
+
+        AFRAME.registerComponent('thrown-dices', {
+            init() {
+                this.el.setAttribute('geometry', 'primitive: plane; width: 0.5; height: 0.2');
+                this.el.setAttribute('material', 'src: images/jouer.png');
+
+                //const dices_initial_positions = Array.from(document.querySelectorAll('[dices] [dice]')).map(el => el.getAttribute('position'));
+
+                const play_handler = () => {
+                    console.log('jouer')
+
+                    Array.from(document.querySelectorAll('[dices] [dice]')).map((el, i) => {
+                        el.removeAttribute('dynamic-body');
+                        el.setAttribute('velocity', '0 0 0');
+                        //console.log(JSON.parse(document.querySelector('[dices] [dice]:nth-child(' + (i + 1) + ')').getAttribute('data-position')))
+                        el.setAttribute('position', JSON.parse(document.querySelector('[dices] [dice]:nth-child(' + (i + 1) + ')').getAttribute('data-position')));
+
+                        el.setAttribute('velocity', {x: -3, y: -5, z: -5});
+                        el.setAttribute('dynamic-body', "shape: box: mass: 200"); 
+                    });
+
+                    this.el.setAttribute('material', {...this.el.getAttribute('material'), visible: false});
+
+                    const timeout = setTimeout(() => {
+                        this.el.setAttribute('material', 'src: images/rejouer.png');
+                        this.el.setAttribute('material', {...this.el.getAttribute('material'), visible: true});
+                    }, 3000);
+                };
+
+                this.el.addEventListener('click', play_handler);
             }
         })
     </script>
@@ -552,7 +671,9 @@
                   kinematic-body="radius: 0.4" player-move>
             <a-entity id="camera" camera="userHeight: 1.6"
                       look-controls="pointerLockEnabled: false"
-                      position="0 1.6 0"></a-entity>
+                      position="0 1.6 0">
+                <a-entity thrown-dices position="0.8 0.5 -1"></a-entity>
+            </a-entity>
 
             <!--<a-entity id="left-hand"
                       position="-0.25 0.6 0"
@@ -568,79 +689,7 @@
                       cursor raycaster="far: 2; objects: "></a-entity>-->
         </a-entity>
 
-        <a-entity dices>
-            <!-- DICE 1 -->
-            <a-entity dynamic-body="shape: box: mass: 200" velocity="-3 -5 -5"
-                    position="20 2 20" rotation="45 0 0" 
-                    dice="id: 1" 
-                    geometry="primitive: box; width: 1; height: 1; depth: 1">
-                <a-plane width="1" height="1" 
-                        position="0 -0.52 0" rotation="90 90 0" 
-                        material="src: #de-face-1" 
-                        dice-face="number: 1; result: 6"></a-plane>
-
-                <a-plane width="1" height="1" 
-                        position="0 0 0.52" rotation="0 0 -90" 
-                        material="src: #de-face-3"
-                        dice-face="number: 3; result: 5"></a-plane>
-
-                <a-plane width="1" height="1" 
-                        position="0.51 0 0" rotation="0 90 0" 
-                        material="src: #de-face-2"
-                        dice-face="number: 2; result: 4"></a-plane>
-
-                <a-plane width="1" height="1" 
-                        position="-0.51 0 0" rotation="0 -90 0" 
-                        material="src: #de-face-4"
-                        dice-face="number: 4; result: 2"></a-plane>
-
-                <a-plane width="1" height="1" 
-                        position="0 0.52 0" rotation="-90 0 0" 
-                        material="src: #de-face-6"
-                        dice-face="number: 6; result: 1"></a-plane>
-
-                <a-plane width="1" height="1" 
-                        position="0 0 -0.51" rotation="0 180 0" 
-                        material="src: #de-face-5"
-                        dice-face="number: 5; result: 3"></a-plane>
-            </a-entity>
-
-            <!-- DICE 2 -->
-            <a-entity dynamic-body="shape: box: mass: 200" velocity="-3 -5 -5" 
-                    position="20 2 20" rotation="45 0 0"
-                    dice="id: 2"
-                    geometry="primitive: box; width: 1; height: 1; depth: 1">
-                <a-plane width="1" height="1" 
-                        position="0 -0.52 0" rotation="90 90 0" 
-                        material="src: #de-face-1" 
-                        dice-face="number: 1; result: 6"></a-plane>
-
-                <a-plane width="1" height="1" 
-                        position="0 0 0.52" rotation="0 0 -90" 
-                        material="src: #de-face-3"
-                        dice-face="number: 3; result: 5"></a-plane>
-
-                <a-plane width="1" height="1" 
-                        position="0.51 0 0" rotation="0 90 0" 
-                        material="src: #de-face-2"
-                        dice-face="number: 2; result: 4"></a-plane>
-
-                <a-plane width="1" height="1" 
-                        position="-0.51 0 0" rotation="0 -90 0" 
-                        material="src: #de-face-4"
-                        dice-face="number: 4; result: 2"></a-plane>
-
-                <a-plane width="1" height="1" 
-                        position="0 0.52 0" rotation="-90 0 0" 
-                        material="src: #de-face-6"
-                        dice-face="number: 6; result: 1"></a-plane>
-
-                <a-plane width="1" height="1" 
-                        position="0 0 -0.51" rotation="0 180 0" 
-                        material="src: #de-face-5"
-                        dice-face="number: 5; result: 3"></a-plane>
-            </a-entity>
-        </a-entity>
+        <a-entity dices="nb_dices: 2" position="0 0 0"></a-entity>
 
         <a-entity piece="color: purple" position="32 0 26.5"></a-entity>
 
@@ -725,7 +774,7 @@
                static-body inter-case="address: Rue du paradis; price: 160"></a-box>
         
         <a-box width="10" height="0.01" depth="5" position="-27.5 0.02 0" color="white" data-price="M200" class="garre-de-lyon" 
-               static-body inter-case="is_train_station: true, train_station_name: de Lyon; price: 200"></a-box>
+               static-body inter-case="is_train_station: true; train_station_name: de Lyon; price: 200"></a-box>
         
         <a-box width="10" height="0.01" depth="5" position="-27.5 0.02 -5" color="#F88F02" data-price="M180" class="avenue-mozart" 
                static-body inter-case="address: Avenue Mozart; price: 180"></a-box>
@@ -753,7 +802,7 @@
                static-body inter-case="address: Faybourg Saint-Honoré; price: 260"></a-box>
         
         <a-box width="5" height="0.01" depth="10" position="0 0.02 -27.5" color="white" data-price="M200" class="garre-du-nord" 
-               static-body inter-case="is_train_station: true, train_station_name: du Nord; price: 200"></a-box>
+               static-body inter-case="is_train_station: true; train_station_name: du Nord; price: 200"></a-box>
         
         <a-box width="5" height="0.01" depth="10" position="-5 0.02 -27.5" color="#E4000F" data-price="M240" class="avenue-henri-martin" 
                static-body inter-case="address: Avenue Henri Martin; price: 240"></a-box>
